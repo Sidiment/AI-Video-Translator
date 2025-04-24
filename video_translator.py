@@ -6,6 +6,8 @@ from moviepy.editor import VideoFileClip, AudioFileClip
 from transformers import MarianMTModel, MarianTokenizer
 from TTS.api import TTS
 import cv2
+import librosa
+import soundfile as sf
 
 class VideoTranslator:
     def __init__(self):
@@ -14,6 +16,7 @@ class VideoTranslator:
         self.translator_model = MarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-zh-en")
         self.translator_tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-zh-en")
         self.tts = TTS(model_name="tts_models/en/vctk/vits", progress_bar=True)
+        self.voice_clone_model = TTS(model_name="tts_models/multilingual/multi-dataset/your_tts", progress_bar=True)
         
     def extract_audio(self, video_path):
         """Extract audio from video file."""
@@ -34,12 +37,22 @@ class VideoTranslator:
         english_text = self.translator_tokenizer.decode(translated[0], skip_special_tokens=True)
         return english_text
     
-    def generate_speech(self, english_text, output_path):
-        """Generate English speech from text."""
-        self.tts.tts_to_file(text=english_text, file_path=output_path, speaker="p335")
+    def generate_speech(self, english_text, output_path, reference_audio=None):
+        """Generate English speech from text with optional voice cloning."""
+        if reference_audio:
+            # Use voice cloning
+            self.voice_clone_model.tts_to_file(
+                text=english_text,
+                file_path=output_path,
+                speaker_wav=reference_audio,
+                language="en"
+            )
+        else:
+            # Use default speaker
+            self.tts.tts_to_file(text=english_text, file_path=output_path, speaker="p335")
     
-    def process_video(self, input_video_path, output_video_path):
-        """Process the video: translate audio and generate new video."""
+    def process_video(self, input_video_path, output_video_path, reference_audio_path=None):
+        """Process the video: translate audio and generate new video with optional voice cloning."""
         # Extract audio
         audio_path = self.extract_audio(input_video_path)
         
@@ -53,7 +66,7 @@ class VideoTranslator:
         
         # Generate English speech
         english_audio_path = "english_audio.wav"
-        self.generate_speech(english_text, english_audio_path)
+        self.generate_speech(english_text, english_audio_path, reference_audio_path)
         
         # Combine video with new audio
         video = VideoFileClip(input_video_path)
@@ -69,4 +82,5 @@ if __name__ == "__main__":
     translator = VideoTranslator()
     input_video = "input.mp4"  # Replace with your input video path
     output_video = "output.mp4"  # Replace with your desired output path
-    translator.process_video(input_video, output_video) 
+    reference_audio = "reference.wav"  # Optional: path to reference audio for voice cloning
+    translator.process_video(input_video, output_video, reference_audio if os.path.exists(reference_audio) else None) 
